@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SibiMoto - ASTA LAMPO ⚡</title>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background: #1a1a1a; color: white; margin: 0; padding: 20px; display: flex; justify-content: center; }
+        #app { width: 100%; max-width: 450px; }
+        .card { background: #2a2a2a; border-radius: 25px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.5); border: 2px solid #2383e2; transition: all 0.5s ease; position: relative; }
+        .card img { width: 100%; height: 250px; object-fit: cover; }
+        .badge-prezzo { position: absolute; top: 15px; right: 15px; background: #2ecc71; color: white; padding: 8px 15px; border-radius: 50px; font-weight: bold; font-size: 18px; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
+        .content { padding: 20px; text-align: center; }
+        .desc-text { color: #ccc; font-size: 14px; margin: 10px 0 15px 0; line-height: 1.4; }
+        .timer { font-size: 38px; font-weight: 900; color: #ff4444; background: rgba(255,68,68,0.1); padding: 10px; border-radius: 15px; margin: 5px 0 15px 0; border: 1px solid #ff4444; font-variant-numeric: tabular-nums; }
+        .btn-voglio { width: 100%; padding: 20px; background: #2ecc71; color: white; border: none; border-radius: 15px; font-size: 22px; font-weight: bold; cursor: pointer; transition: 0.2s; box-shadow: 0 5px 15px rgba(46,204,113,0.3); }
+        .btn-voglio:active { transform: scale(0.95); background: #27ae60; }
+        .stats-section { margin-top: 20px; background: #333; padding: 15px; border-radius: 15px; border-left: 5px solid #f1c40f; }
+        .leader { color: #f1c40f; font-weight: bold; font-size: 22px; display: block; margin-top: 5px; }
+        .click-count { color: #2ecc71; font-size: 14px; font-weight: bold; text-transform: uppercase; display: block; margin-top: 10px; letter-spacing: 1px; }
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+
+<div id="app">
+    <div id="activeOffer" class="card hidden">
+        <div id="badgePrezzo" class="badge-prezzo">€ -</div>
+        <img id="motoImg" src="" alt="Moto">
+        <div class="content">
+            <h2 id="motoNome" style="margin:0; text-transform: uppercase; letter-spacing: 1px;">CARICAMENTO...</h2>
+            <div id="motoDesc" class="desc-text"></div>
+            <div id="countdown" class="timer">00:00</div>
+            
+            <button id="mainButton" class="btn-voglio" onclick="prenotaMoto()">⚡ LO VOGLIO!</button>
+            
+            <div class="stats-section">
+                <div style="font-size: 12px; opacity: 0.7; text-transform: uppercase;">In testa al momento:</div>
+                <div id="currentWinner" class="leader">Nessuno</div>
+                <div id="clickDisplay" class="click-count">OFFERTE RICEVUTE: 0</div>
+            </div>
+        </div>
+    </div>
+
+    <div id="noOffer" class="card hidden" style="padding:40px; text-align:center;">
+        <h2 style="color: #ff4444;">⚡ NESSUNA ASTA</h2>
+        <p style="opacity: 0.8;">Tutte le moto sono state vendute. Torna più tardi!</p>
+    </div>
+</div>
+
+<script>
+    const firebaseConfig = {
+        apiKey: "AIzaSyCxKhoN8xlYTB2IGTssVrT_oxyhp5b6VIk",
+        authDomain: "garage-9548b.firebaseapp.com",
+        projectId: "garage-9548b",
+        storageBucket: "garage-9548b.firebasestorage.app",
+        messagingSenderId: "370272576490",
+        appId: "1:370272576490:web:2019a4ff01bf7f3ab9c893"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
+    let offertaAttiva = null;
+    let timerInterval = null;
+
+    db.collection("offerte_lampo").orderBy("scadenza", "desc").limit(1).onSnapshot(snap => {
+        if (snap.empty) { mostraNoOfferta(); return; }
+        
+        const doc = snap.docs[0];
+        offertaAttiva = { id: doc.id, ...doc.data() };
+        
+        document.getElementById('motoNome').innerText = offertaAttiva.modello;
+        document.getElementById('motoDesc').innerText = offertaAttiva.descrizione || "";
+        document.getElementById('badgePrezzo').innerText = "€ " + (offertaAttiva.prezzo || "-");
+        document.getElementById('motoImg').src = offertaAttiva.foto || '';
+        document.getElementById('currentWinner').innerText = offertaAttiva.ultimoInteressato || "Ancora nessuno!";
+        document.getElementById('clickDisplay').innerText = "OFFERTE RICEVUTE: " + (offertaAttiva.click || 0);
+        
+        document.getElementById('activeOffer').classList.remove('hidden');
+        document.getElementById('noOffer').classList.add('hidden');
+        
+        if (timerInterval) clearInterval(timerInterval);
+        avviaTimer(offertaAttiva.scadenza);
+    });
+
+    function avviaTimer(scadenzaMillis) {
+        timerInterval = setInterval(function() {
+            const now = new Date().getTime();
+            const distance = scadenzaMillis - now;
+            const countdownEl = document.getElementById("countdown");
+            const btn = document.getElementById("mainButton");
+            const card = document.getElementById("activeOffer");
+
+            if (distance < 0) {
+                clearInterval(timerInterval);
+                countdownEl.innerHTML = "ASTA CONCLUSA";
+                countdownEl.style.color = "#888";
+                if (btn) btn.style.display = "none";
+                card.style.opacity = "0.6";
+                card.style.filter = "grayscale(60%)";
+                return;
+            }
+            
+            if (btn) btn.style.display = "block";
+            card.style.opacity = "1";
+            card.style.filter = "none";
+
+            const m = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
+            const s = Math.floor((distance % (1000 * 60)) / 1000);
+            countdownEl.innerHTML = (m < 10 ? "0" + m : m) + ":" + (s < 10 ? "0" + s : s);
+        }, 1000);
+    }
+
+    async function prenotaMoto() {
+        let nickname = localStorage.getItem('sibi_nick');
+        if (!nickname) {
+            nickname = prompt("Inserisci il tuo Nickname per partecipare all'asta:");
+            if (!nickname || nickname.trim() === "") return;
+            localStorage.setItem('sibi_nick', nickname.trim());
+        }
+
+        if (offertaAttiva) {
+            const ref = db.collection("offerte_lampo").doc(offertaAttiva.id);
+            try {
+                await db.runTransaction(async (t) => {
+                    const doc = await t.get(ref);
+                    const nuoviClick = (doc.data().click || 0) + 1;
+                    t.update(ref, {
+                        ultimoInteressato: nickname,
+                        click: nuoviClick,
+                        dataUltimoClick: Date.now()
+                    });
+                });
+            } catch (e) { console.error(e); }
+        }
+    }
+
+    function mostraNoOfferta() {
+        document.getElementById('activeOffer').classList.add('hidden');
+        document.getElementById('noOffer').classList.remove('hidden');
+    }
+</script>
+
+</body>
+</html>
