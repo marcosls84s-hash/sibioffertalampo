@@ -46,11 +46,12 @@
 
     <div id="noOffer" class="card hidden" style="padding:40px; text-align:center;">
         <h2 style="color: #ff4444;">⚡ NESSUNA ASTA</h2>
-        <p style="opacity: 0.8;">Tutte le moto sono state vendute. Torna più tardi!</p>
+        <p style="opacity: 0.8;">Tutte le moto sono state vendute. Torna più tardi per la prossima!</p>
     </div>
 </div>
 
 <script>
+    // Configurazione Firebase
     const firebaseConfig = {
         apiKey: "AIzaSyCxKhoN8xlYTB2IGTssVrT_oxyhp5b6VIk",
         authDomain: "garage-9548b.firebaseapp.com",
@@ -65,6 +66,7 @@
     let offertaAttiva = null;
     let timerInterval = null;
 
+    // Caricamento Offerta in tempo reale
     db.collection("offerte_lampo").orderBy("scadenza", "desc").limit(1).onSnapshot(snap => {
         if (snap.empty) { mostraNoOfferta(); return; }
         
@@ -96,7 +98,6 @@
             if (distance < 0) {
                 clearInterval(timerInterval);
                 countdownEl.innerHTML = "ASTA CONCLUSA";
-                countdownEl.style.color = "#888";
                 if (btn) btn.style.display = "none";
                 card.style.opacity = "0.6";
                 card.style.filter = "grayscale(60%)";
@@ -114,26 +115,50 @@
     }
 
     async function prenotaMoto() {
+        // Recupera Nickname e Telefono salvati sul telefono
         let nickname = localStorage.getItem('sibi_nick');
-        if (!nickname) {
-            nickname = prompt("Inserisci il tuo Nickname per partecipare all'asta:");
-            if (!nickname || nickname.trim() === "") return;
-            localStorage.setItem('sibi_nick', nickname.trim());
+        let telefono = localStorage.getItem('sibi_phone');
+
+        // Se mancano, li chiede
+        if (!nickname || !telefono) {
+            nickname = prompt("Inserisci il tuo Nome/Nickname:");
+            if (!nickname) return;
+            telefono = prompt("Inserisci il tuo numero di Telefono:");
+            if (!telefono) return;
+
+            localStorage.setItem('sibi_nick', nickname);
+            localStorage.setItem('sibi_phone', telefono);
         }
 
         if (offertaAttiva) {
-            const ref = db.collection("offerte_lampo").doc(offertaAttiva.id);
+            const offerRef = db.collection("offerte_lampo").doc(offertaAttiva.id);
+            // Crea un nuovo record unico per questo clic nella sottocollezione "partecipanti"
+            const clickRecordRef = offerRef.collection("partecipanti").doc();
+
             try {
                 await db.runTransaction(async (t) => {
-                    const doc = await t.get(ref);
+                    const doc = await t.get(offerRef);
+                    if (!doc.exists) return;
+                    
                     const nuoviClick = (doc.data().click || 0) + 1;
-                    t.update(ref, {
+                    
+                    // 1. Aggiorna l'offerta generale (quella che vedono tutti)
+                    t.update(offerRef, {
                         ultimoInteressato: nickname,
                         click: nuoviClick,
                         dataUltimoClick: Date.now()
                     });
+
+                    // 2. Crea lo "spazio" per questa persona specifica nel database
+                    t.set(clickRecordRef, {
+                        nome: nickname,
+                        cellulare: telefono,
+                        orario: Date.now()
+                    });
                 });
-            } catch (e) { console.error(e); }
+            } catch (e) {
+                console.error("Errore durante il salvataggio: ", e);
+            }
         }
     }
 
